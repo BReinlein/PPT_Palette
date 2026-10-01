@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maßpalette</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  :root {
+    --bg: #f3f4f5;
+    --panel: #ffffff;
+    --ink: #1d2126;
+    --muted: #6b7279;
+    --line: #d5d9dd;
+    --field: #ffffff;
+    --accent: #0a84c6;
+    --accent-ink: #ffffff;
+    --error: #c4321b;
+    --ok: #2f7d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f2124;
+      --panel: #2a2d31;
+      --ink: #e9ebed;
+      --muted: #9aa1a8;
+      --line: #42464c;
+      --field: #1b1d20;
+      --accent: #3aa8e4;
+      --accent-ink: #0d1b24;
+      --error: #ff7a63;
+      --ok: #6fcf97;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 12px/1.4 "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    padding: 10px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 8px;
+  }
+  h1 { font-size: 13px; font-weight: 600; margin: 0; }
+  h2 { font-size: 12px; font-weight: 600; margin: 0 0 8px; }
+  .sel-info { color: var(--muted); font-variant-numeric: tabular-nums; }
+  select, input, button { font: inherit; color: inherit; }
+  select {
+    background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px;
+  }
+
+  /* Position & Größe */
+  .geo { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+
+  /* Referenzpunkt: wie Schnittmarken um einen Rahmen */
+  .proxy {
+    position: relative; width: 58px; height: 58px;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    place-items: center;
+  }
+  .proxy::before {
+    content: ""; position: absolute; inset: 9px;
+    border: 1px solid var(--muted);
+  }
+  .proxy button {
+    position: relative; z-index: 1;
+    width: 10px; height: 10px; padding: 0;
+    border: 1.5px solid var(--muted); background: var(--panel);
+    cursor: pointer; border-radius: 1px;
+  }
+  .proxy button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); transform: scale(1.25); }
+  .proxy button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .fields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px 6px; align-items: center; }
+  .f { display: flex; align-items: center; gap: 5px; min-width: 0; }
+  .f label { width: 12px; color: var(--muted); font-weight: 600; flex: none; }
+  .f input {
+    width: 100%; min-width: 0;
+    background: var(--field); border: 1px solid var(--line); border-radius: 4px;
+    padding: 3px 5px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .f input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .f input.bad { border-color: var(--error); }
+  .f input:disabled { opacity: .45; }
+  .spacer { width: 24px; }
+
+  .lock {
+    width: 24px; height: 24px; padding: 0; display: grid; place-items: center;
+    background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer; color: var(--muted);
+  }
+  .lock[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  .lock:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .lock svg { width: 14px; height: 14px; }
+
+  .hint { color: var(--muted); margin: 8px 0 0; font-size: 11px; }
+  .hint code { font-family: inherit; background: var(--bg); border-radius: 3px; padding: 0 3px; color: var(--ink); }
+
+  /* Verteilen */
+  .dist { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--field); border: 1px solid var(--line); border-radius: 4px;
+    padding: 4px 8px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn svg { width: 14px; height: 14px; }
+  .gaps { margin-top: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .gaps div { display: flex; justify-content: space-between; }
+
+  .status { min-height: 16px; font-size: 11px; color: var(--muted); padding: 0 2px; }
+  .status.err { color: var(--error); }
+  .status.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="head">
+    <h1>Position und Größe</h1>
+    <select id="unit" aria-label="Maßeinheit">
+      <option value="mm">mm</option>
+      <option value="cm">cm</option>
+      <option value="pt">pt</option>
+      <option value="px">px</option>
+      <option value="in">in</option>
+    </select>
+  </div>
+
+  <div class="geo">
+    <div class="proxy" id="proxy" role="group" aria-label="Referenzpunkt">
+      <!-- 9 Referenzpunkte, Reihenfolge zeilenweise -->
+    </div>
+
+    <div class="fields">
+      <div class="f"><label for="fx">X</label><input id="fx" data-k="x" inputmode="decimal" autocomplete="off"></div>
+      <div class="f"><label for="fy">Y</label><input id="fy" data-k="y" inputmode="decimal" autocomplete="off"></div>
+      <div class="spacer"></div>
+      <div class="f"><label for="fw">B</label><input id="fw" data-k="w" inputmode="decimal" autocomplete="off"></div>
+      <div class="f"><label for="fh">H</label><input id="fh" data-k="h" inputmode="decimal" autocomplete="off"></div>
+      <button class="lock" id="lock" aria-pressed="false" title="Proportionen beibehalten">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M6.5 9.5l3-3"/>
+          <path d="M7.5 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1"/>
+          <path d="M8.5 11.5l-1 1a2.5 2.5 0 01-3.5-3.5l1-1"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <p class="hint">Rechnen im Feld: <code>+5</code> <code>*2</code> <code>/3</code> <code>50%</code> <code>10mm+2cm</code>. Pfeiltasten ändern um 1 Schritt, mit Umschalt um 10.</p>
+</div>
+
+<div class="panel">
+  <h2>Mit festem Abstand verteilen</h2>
+  <div class="dist">
+    <div class="f"><label for="gap" title="Abstand">↔</label><input id="gap" value="5" inputmode="decimal" autocomplete="off" aria-label="Abstand"></div>
+    <button class="btn" id="distH" title="Nebeneinander, von links nach rechts">
+      <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="3" height="8"/><rect x="6.5" y="4" width="3" height="8"/><rect x="12" y="4" width="3" height="8"/></svg>
+      Horizontal
+    </button>
+    <button class="btn" id="distV" title="Untereinander, von oben nach unten">
+      <svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="1" width="8" height="3"/><rect x="4" y="6.5" width="8" height="3"/><rect x="4" y="12" width="8" height="3"/></svg>
+      Vertikal
+    </button>
+  </div>
+  <div class="gaps" id="gaps"></div>
+</div>
+
+<div class="status" id="status" role="status" aria-live="polite"></div>
+<div class="sel-info" id="selInfo"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ---------- Einheiten ---------- */
+  // PowerPoint rechnet intern in Punkt (1 pt = 1/72 Zoll).
+  const PT_PER = { mm: 72 / 25.4, cm: 72 / 2.54, pt: 1, in: 72, px: 0.75 };
+  const DECIMALS = { mm: 2, cm: 3, pt: 2, in: 3, px: 1 };
+  const STEP = { mm: 1, cm: 0.1, pt: 1, in: 0.1, px: 1 };
+
+  const state = {
+    unit: "mm",
+    ref: { x: 0, y: 0 },   // 0 / 0.5 / 1
+    lock: false,
+    shapes: [],
+    bounds: null,
+    busy: false
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const inputs = { x: $("fx"), y: $("fy"), w: $("fw"), h: $("fh") };
+
+  const toUnit = (pt) => pt / PT_PER[state.unit];
+  const toPt = (v) => v * PT_PER[state.unit];
+
+  function fmt(v) {
+    if (Math.abs(v) < 1e-9) v = 0;
+    return new Intl.NumberFormat("de-DE", {
+      maximumFractionDigits: DECIMALS[state.unit], useGrouping: false
+    }).format(v);
+  }
+
+  /* ---------- Einstellungen merken ---------- */
+  function loadPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem("masspalette") || "{}");
+      if (p.unit && PT_PER[p.unit]) state.unit = p.unit;
+      if (p.ref) state.ref = p.ref;
+      if (typeof p.lock === "boolean") state.lock = p.lock;
+      if (typeof p.gap === "string") $("gap").value = p.gap;
+    } catch (e) { /* ohne gespeicherte Einstellungen weiter */ }
+  }
+  function savePrefs() {
+    try {
+      localStorage.setItem("masspalette", JSON.stringify({
+        unit: state.unit, ref: state.ref, lock: state.lock, gap: $("gap").value
+      }));
+    } catch (e) { /* ignorieren */ }
+  }
+
+  /* ---------- Rechnen in Feldern ---------- */
+  // Unterstützt: + - * / ( ), Einheiten (mm cm pt px in "), Prozent.
+  // Beginnt die Eingabe mit + * oder /, wird relativ zum aktuellen Wert gerechnet.
+  // Prozent bedeutet "Prozent des aktuellen Werts" (z. B. 50%, +10%);
+  // direkt hinter * oder / ist es ein Faktor (*50% = halbieren).
+  function tokenize(s) {
+    const re = /(\d+(?:\.\d*)?|\.\d+)(mm|cm|pt|px|in|%)?|([+\-*\/()])/y;
+    const out = [];
+    re.lastIndex = 0;
+    while (re.lastIndex < s.length) {
+      const m = re.exec(s);
+      if (!m) throw new Error("Ungültige Eingabe");
+      if (m[1] !== undefined) out.push({ t: "num", v: parseFloat(m[1]), u: m[2] || null });
+      else out.push({ t: m[3] });
+    }
+    return out;
+  }
+
+  function evaluate(raw, current) {
+    let s = String(raw).trim().toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/,/g, ".")
+      .replace(/×/g, "*")
+      .replace(/[÷:]/g, "/")
+      .replace(/[″"]/g, "in")
+      .replace(/[−–]/g, "-");
+    if (!s) throw new Error("Bitte einen Wert eingeben");
+    if (/^[+*\/]/.test(s)) s = "(" + current.toFixed(6) + ")" + s;
+
+    const tokens = tokenize(s);
+    let i = 0;
+    const peek = () => tokens[i];
+    const next = () => tokens[i++];
+
+    function expr() {
+      let v = term();
+      while (peek() && (peek().t === "+" || peek().t === "-")) {
+        const op = next().t; const r = term();
+        v = op === "+" ? v + r : v - r;
+      }
+      return v;
+    }
+    function term() {
+      let v = unary(false);
+      while (peek() && (peek().t === "*" || peek().t === "/")) {
+        const op = next().t; const r = unary(true);
+        if (op === "/" && r === 0) throw new Error("Division durch 0");
+        v = op === "*" ? v * r : v / r;
+      }
+      return v;
+    }
+    function unary(asFactor) {
+      if (peek() && peek().t === "-") { next(); return -unary(asFactor); }
+      if (peek() && peek().t === "+") { next(); return unary(asFactor); }
+      return primary(asFactor);
+    }
+    function primary(asFactor) {
+      const tk = next();
+      if (!tk) throw new Error("Ausdruck unvollständig");
+      if (tk.t === "(") {
+        const v = expr();
+        const close = next();
+        if (!close || close.t !== ")") throw new Error("Klammer fehlt");
+        return v;
+      }
+      if (tk.t === "num") {
+        if (tk.u === "%") return asFactor ? tk.v / 100 : current * tk.v / 100;
+        if (tk.u) return tk.v * PT_PER[tk.u] / PT_PER[state.unit];
+        return tk.v;
+      }
+      throw new Error("Ungültige Eingabe");
+    }
+
+    const v = expr();
+    if (i < tokens.length) throw new Error("Ungültige Eingabe");
+    if (!isFinite(v)) throw new Error("Ergebnis ist keine Zahl");
+    return v;
+  }
+
+  /* ---------- Geometrie ---------- */
+  function boundsOf(list) {
+    if (!list.length) return null;
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    for (const s of list) {
+      l = Math.min(l, s.left); t = Math.min(t, s.top);
+      r = Math.max(r, s.left + s.width); b = Math.max(b, s.top + s.height);
+    }
+    return { l, t, w: r - l, h: b - t };
+  }
+
+  // Liefert für ein Feld eine Funktion, die aus den aktuellen Grenzen die neuen berechnet.
+  function makeTarget(key, valuePt) {
+    const rx = state.ref.x, ry = state.ref.y, lock = state.lock;
+    return (B) => {
+      const nb = { ...B };
+      if (key === "x") nb.l = valuePt - rx * B.w;
+      if (key === "y") nb.t = valuePt - ry * B.h;
+      if (key === "w") {
+        const ax = B.l + rx * B.w;
+        nb.w = valuePt; nb.l = ax - rx * nb.w;
+        if (lock && B.w > 0) {
+          const ay = B.t + ry * B.h;
+          nb.h = B.h * valuePt / B.w; nb.t = ay - ry * nb.h;
+        }
+      }
+      if (key === "h") {
+        const ay = B.t + ry * B.h;
+        nb.h = valuePt; nb.t = ay - ry * nb.h;
+        if (lock && B.h > 0) {
+          const ax = B.l + rx * B.w;
+          nb.w = B.w * valuePt / B.h; nb.l = ax - rx * nb.w;
+        }
+      }
+      return nb;
+    };
+  }
+
+  /* ---------- PowerPoint-Zugriff ---------- */
+  async function readSelection() {
+    return PowerPoint.run(async (ctx) => {
+      const sel = ctx.presentation.getSelectedShapes();
+      sel.load("items/id,items/name,items/left,items/top,items/width,items/height");
+      await ctx.sync();
+      return sel.items.map((s) => ({
+        id: s.id, name: s.name, left: s.left, top: s.top, width: s.width, height: s.height
+      }));
+    });
+  }
+
+  async function transformSelection(targetFn) {
+    await PowerPoint.run(async (ctx) => {
+      const sel = ctx.presentation.getSelectedShapes();
+      sel.load("items/left,items/top,items/width,items/height");
+      await ctx.sync();
+      const items = sel.items;
+      if (!items.length) throw new Error("Nichts ausgewählt");
+      const B = boundsOf(items);
+      const nb = targetFn(B);
+      if (nb.w < 0 || nb.h < 0) throw new Error("Breite und Höhe dürfen nicht negativ sein");
+
+      const sx = B.w > 0 ? nb.w / B.w : null;
+      const sy = B.h > 0 ? nb.h / B.h : null;
+      for (const s of items) {
+        const relX = B.w > 0 ? (s.left - B.l) : 0;
+        const relY = B.h > 0 ? (s.top - B.t) : 0;
+        if (sx !== null) {
+          s.left = nb.l + relX * sx;
+          if (Math.abs(sx - 1) > 1e-9) s.width = s.width * sx;
+        } else {
+          // Rahmen ohne Breite (z. B. senkrechte Linie)
+          s.left = nb.l;
+          if (items.length === 1 && nb.w !== B.w) s.width = nb.w;
+        }
+        if (sy !== null) {
+          s.top = nb.t + relY * sy;
+          if (Math.abs(sy - 1) > 1e-9) s.height = s.height * sy;
+        } else {
+          s.top = nb.t;
+          if (items.length === 1 && nb.h !== B.h) s.height = nb.h;
+        }
+      }
+      await ctx.sync();
+    });
+  }
+
+  async function distribute(axis, gapPt) {
+    await PowerPoint.run(async (ctx) => {
+      const sel = ctx.presentation.getSelectedShapes();
+      sel.load("items/left,items/top,items/width,items/height");
+      await ctx.sync();
+      const items = sel.items.slice();
+      if (items.length < 2) throw new Error("Mindestens zwei Objekte auswählen");
+      const pos = axis === "h" ? "left" : "top";
+      const size = axis === "h" ? "width" : "height";
+      items.sort((a, b) => a[pos] - b[pos]);
+      let cursor = items[0][pos] + items[0][size];
+      for (let k = 1; k < items.length; k++) {
+        const s = items[k];
+        const p = cursor + gapPt;
+        s[pos] = p;
+        cursor = p + s[size];
+      }
+      await ctx.sync();
+    });
+  }
+
+  /* ---------- Anzeige ---------- */
+  function setStatus(msg, kind) {
+    const el = $("status");
+    el.textContent = msg || "";
+    el.className = "status" + (kind ? " " + kind : "");
+    clearTimeout(setStatus.t);
+    if (msg && kind !== "err") setStatus.t = setTimeout(() => setStatus(""), 2500);
+  }
+
+  function currentValue(key) {
+    const B = state.bounds;
+    if (!B) return 0;
+    if (key === "x") return toUnit(B.l + state.ref.x * B.w);
+    if (key === "y") return toUnit(B.t + state.ref.y * B.h);
+    if (key === "w") return toUnit(B.w);
+    return toUnit(B.h);
+  }
+
+  function gapsOf(list, axis) {
+    const pos = axis === "h" ? "left" : "top";
+    const size = axis === "h" ? "width" : "height";
+    const s = list.slice().sort((a, b) => a[pos] - b[pos]);
+    const g = [];
+    for (let k = 1; k < s.length; k++) g.push(s[k][pos] - (s[k - 1][pos] + s[k - 1][size]));
+    return g;
+  }
+
+  function describeGaps(g) {
+    if (!g.length) return "–";
+    const v = g.map(toUnit);
+    const min = Math.min(...v), max = Math.max(...v);
+    const u = " " + state.unit;
+    if (max - min < 0.01) return fmt(min) + u + " (gleichmäßig)";
+    return fmt(min) + " bis " + fmt(max) + u;
+  }
+
+  function render() {
+    const has = !!state.bounds;
+    for (const k in inputs) {
+      const el = inputs[k];
+      el.disabled = !has;
+      if (document.activeElement !== el) {
+        el.value = has ? fmt(currentValue(k)) : "";
+        el.classList.remove("bad");
+      }
+    }
+    $("proxy").querySelectorAll("button").forEach((b) => {
+      const on = +b.dataset.x === state.ref.x && +b.dataset.y === state.ref.y;
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    $("lock").setAttribute("aria-pressed", state.lock ? "true" : "false");
+    $("unit").value = state.unit;
+
+    const n = state.shapes.length;
+    $("distH").disabled = $("distV").disabled = n < 2;
+    $("selInfo").textContent = n === 0 ? "Kein Objekt ausgewählt"
+      : n === 1 ? "1 Objekt: " + (state.shapes[0].name || "")
+      : n + " Objekte, Werte beziehen sich auf den gemeinsamen Rahmen";
+
+    $("gaps").innerHTML = n >= 2
+      ? "<div><span>Abstand horizontal</span><span>" + describeGaps(gapsOf(state.shapes, "h")) + "</span></div>" +
+        "<div><span>Abstand vertikal</span><span>" + describeGaps(gapsOf(state.shapes, "v")) + "</span></div>"
+      : "";
+  }
+
+  async function refresh() {
+    if (state.busy) return;
+    try {
+      const shapes = await readSelection();
+      state.shapes = shapes;
+      state.bounds = boundsOf(shapes);
+      render();
+    } catch (e) {
+      // Kommt z. B. vor, wenn gerade Text bearbeitet wird oder eine Folie im Sortierer markiert ist
+      state.shapes = []; state.bounds = null; render();
+    }
+  }
+
+  async function run(task, okMsg) {
+    if (state.busy) return;
+    state.busy = true;
+    try {
+      await task();
+      if (okMsg) setStatus(okMsg, "ok");
+    } catch (e) {
+      setStatus(e.message || String(e), "err");
+    } finally {
+      state.busy = false;
+      await refresh();
+    }
+  }
+
+  /* ---------- Eingabefelder ---------- */
+  function commit(el) {
+    const key = el.dataset.k;
+    if (!state.bounds) return;
+    const cur = currentValue(key);
+    let v;
+    try {
+      v = evaluate(el.value, cur);
+    } catch (e) {
+      el.classList.add("bad");
+      setStatus(e.message, "err");
+      return;
+    }
+    el.classList.remove("bad");
+    if ((key === "w" || key === "h") && v < 0) {
+      el.classList.add("bad");
+      setStatus("Breite und Höhe dürfen nicht negativ sein", "err");
+      return;
+    }
+    if (Math.abs(v - cur) < 1e-6) { el.value = fmt(cur); return; }
+    el.value = fmt(v);
+    run(() => transformSelection(makeTarget(key, toPt(v))));
+  }
+
+  for (const k in inputs) {
+    const el = inputs[k];
+    el.addEventListener("focus", () => el.select());
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(el); el.select(); }
+      else if (e.key === "Escape") { el.value = fmt(currentValue(k)); el.classList.remove("bad"); el.select(); setStatus(""); }
+      else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        if (!state.bounds || state.busy) return;
+        const step = STEP[state.unit] * (e.shiftKey ? 10 : 1) * (e.key === "ArrowUp" ? 1 : -1);
+        let v = currentValue(k) + step;
+        if ((k === "w" || k === "h") && v < 0) v = 0;
+        el.value = fmt(v);
+        run(() => transformSelection(makeTarget(k, toPt(v)))).then(() => el.select());
+      }
+    });
+    el.addEventListener("blur", () => {
+      if (!state.bounds) return;
+      const shown = fmt(currentValue(k));
+      if (el.value !== shown) commit(el);
+    });
+  }
+
+  /* ---------- Referenzpunkt, Kette, Einheit ---------- */
+  const proxy = $("proxy");
+  const names = [["oben links", "oben Mitte", "oben rechts"], ["Mitte links", "Mitte", "Mitte rechts"], ["unten links", "unten Mitte", "unten rechts"]];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    const b = document.createElement("button");
+    b.dataset.x = c / 2; b.dataset.y = r / 2;
+    b.title = "Referenzpunkt " + names[r][c];
+    b.setAttribute("aria-label", b.title);
+    b.addEventListener("click", () => {
+      state.ref = { x: c / 2, y: r / 2 }; savePrefs(); render();
+    });
+    proxy.appendChild(b);
+  }
+  $("lock").addEventListener("click", () => { state.lock = !state.lock; savePrefs(); render(); });
+  $("unit").addEventListener("change", (e) => { state.unit = e.target.value; savePrefs(); render(); });
+
+  /* ---------- Verteilen ---------- */
+  function doDistribute(axis) {
+    const gapEl = $("gap");
+    const g = gapsOf(state.shapes, axis);
+    const avg = g.length ? toUnit(g.reduce((a, b) => a + b, 0) / g.length) : 0;
+    let v;
+    try { v = evaluate(gapEl.value, avg); }
+    catch (e) { gapEl.classList.add("bad"); setStatus(e.message, "err"); return; }
+    gapEl.classList.remove("bad");
+    gapEl.value = fmt(v);
+    savePrefs();
+    run(() => distribute(axis, toPt(v)), "Verteilt mit " + fmt(v) + " " + state.unit + " Abstand");
+  }
+  $("distH").addEventListener("click", () => doDistribute("h"));
+  $("distV").addEventListener("click", () => doDistribute("v"));
+  $("gap").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doDistribute("h"); } });
+
+  /* ---------- Start ---------- */
+  loadPrefs();
+  render();
+
+  // Für Tests außerhalb von PowerPoint
+  window.__massp = { evaluate, boundsOf, makeTarget, state };
+
+  if (typeof Office === "undefined") return;
+  Office.onReady((info) => {
+    if (info.host !== Office.HostType.PowerPoint) {
+      setStatus("Diese Palette funktioniert nur in PowerPoint.", "err");
+      return;
+    }
+    if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.5")) {
+      setStatus("Diese PowerPoint-Version ist zu alt. Bitte Microsoft 365 aktualisieren.", "err");
+      return;
+    }
+    let t;
+    const soon = () => { clearTimeout(t); t = setTimeout(refresh, 80); };
+    try {
+      Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, soon);
+    } catch (e) { /* Abfrage unten übernimmt */ }
+    // Verschieben mit der Maus löst kein Auswahl-Ereignis aus, daher zusätzlich regelmäßig abfragen.
+    setInterval(() => {
+      const editing = Object.values(inputs).includes(document.activeElement);
+      if (!document.hidden && !editing) refresh();
+    }, 1200);
+    window.addEventListener("focus", soon);
+    refresh();
+  });
+})();
+</script>
+</body>
+</html>
